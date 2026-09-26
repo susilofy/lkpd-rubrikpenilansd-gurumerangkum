@@ -61,7 +61,14 @@ export const TopicSuggester: React.FC<TopicSuggesterProps> = ({
           semester: semester || '1',
         }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.warn('[TopicSuggester] Non-JSON response, using curated curriculum topics');
+      }
+
       if (Array.isArray(data.topics) && data.topics.length >= 8) {
         setTopics(data.topics);
         setAiSource('ai');

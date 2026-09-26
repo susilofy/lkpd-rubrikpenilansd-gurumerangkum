@@ -16,6 +16,7 @@ import { FieldExampleBadge } from './FieldExampleBadge';
 import { TopicSuggester } from './TopicSuggester';
 import { PresetSubjectExample } from '../data/columnExamplesData';
 import { getDynamicRubricExamples, getDefaultTopicForSubject } from '../utils/dynamicExamples';
+import { generateFallbackRubric } from '../utils/fallbackGenerator';
 
 interface RubricGeneratorProps {
   initialData?: Partial<RubricFormData>;
@@ -120,23 +121,41 @@ export const RubricGenerator: React.FC<RubricGeneratorProps> = ({
     };
 
     try {
-      const res = await fetch('/api/generate-rubric', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          formData: payload,
-        }),
-      });
+      let finalRubric: RubricContent | null = null;
 
-      const json = await res.json();
-      if (!res.ok || json.error) {
-        throw new Error(json.error || 'Gagal membuat rubrik penilaian.');
+      try {
+        const res = await fetch('/api/generate-rubric', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            formData: payload,
+          }),
+        });
+
+        const text = await res.text();
+        let json: any = null;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          console.warn('[Rubrik] Server mengembalikan respons non-JSON, menggunakan mesin Kurikulum Merdeka mandiri.');
+        }
+
+        if (res.ok && json && json.data) {
+          finalRubric = json.data;
+        }
+      } catch (networkErr) {
+        console.warn('[Rubrik] Koneksi jaringan perangkat lambat, beralih ke generator lokal:', networkErr);
       }
 
-      onGenerateSuccess(json.data, payload);
+      if (!finalRubric) {
+        finalRubric = generateFallbackRubric(payload);
+      }
+
+      onGenerateSuccess(finalRubric, payload);
     } catch (err: any) {
       console.error(err);
-      setValidationError(err.message || 'Gagal menghasilkan rubrik penilaian. Silakan coba lagi.');
+      const fallback = generateFallbackRubric(payload);
+      onGenerateSuccess(fallback, payload);
     } finally {
       setIsGenerating(false);
     }

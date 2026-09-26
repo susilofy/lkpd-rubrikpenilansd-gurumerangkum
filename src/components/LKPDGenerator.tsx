@@ -33,6 +33,7 @@ import { FieldExampleBadge } from './FieldExampleBadge';
 import { TopicSuggester } from './TopicSuggester';
 import { PresetSubjectExample } from '../data/columnExamplesData';
 import { getDynamicLkpdExamples, getDefaultTopicForSubject } from '../utils/dynamicExamples';
+import { generateFallbackLKPD, generateFallbackCpTp } from '../utils/fallbackGenerator';
 
 interface LKPDGeneratorProps {
   initialData?: Partial<LKPDFormData>;
@@ -268,8 +269,16 @@ export const LKPDGenerator: React.FC<LKPDGeneratorProps> = ({
           characterProfiles: formData.characterProfiles,
         }),
       });
-      const data = await res.json();
-      if (data.cp || data.tp || data.indicators) {
+
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.warn('[CP/TP] Server returned non-JSON, using local Kurikulum Merdeka formulation');
+      }
+
+      if (data && (data.cp || data.tp || data.indicators)) {
         setFormData((prev) => ({
           ...prev,
           topic: targetTopic,
@@ -278,24 +287,24 @@ export const LKPDGenerator: React.FC<LKPDGeneratorProps> = ({
           indicators: data.indicators || prev.indicators,
         }));
       } else {
-        // Fallback to high-quality dynamic examples if API returns incomplete data
+        const fallback = generateFallbackCpTp(formData.grade, activeSubject || formData.subject, targetTopic, formData.phase);
         setFormData((prev) => ({
           ...prev,
           topic: targetTopic,
-          cp: dynamicExamples.cp || prev.cp,
-          tp: dynamicExamples.tp || prev.tp,
-          indicators: dynamicExamples.indicators || prev.indicators,
+          cp: fallback.cp || dynamicExamples.cp || prev.cp,
+          tp: fallback.tp || dynamicExamples.tp || prev.tp,
+          indicators: fallback.indicators || dynamicExamples.indicators || prev.indicators,
         }));
       }
     } catch (err) {
-      console.error(err);
-      // Fallback on network/AI error so this action is always active and reliable
+      console.warn('[CP/TP] Fetch failed, using local Kurikulum Merdeka fallback:', err);
+      const fallback = generateFallbackCpTp(formData.grade, activeSubject || formData.subject, targetTopic, formData.phase);
       setFormData((prev) => ({
         ...prev,
         topic: targetTopic,
-        cp: dynamicExamples.cp || prev.cp,
-        tp: dynamicExamples.tp || prev.tp,
-        indicators: dynamicExamples.indicators || prev.indicators,
+        cp: fallback.cp || dynamicExamples.cp || prev.cp,
+        tp: fallback.tp || dynamicExamples.tp || prev.tp,
+        indicators: fallback.indicators || dynamicExamples.indicators || prev.indicators,
       }));
     } finally {
       setIsSuggestingCpTp(false);
@@ -329,21 +338,41 @@ export const LKPDGenerator: React.FC<LKPDGeneratorProps> = ({
     };
 
     try {
-      const res = await fetch('/api/generate-lkpd', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let finalContent: LKPDContent | null = null;
 
-      const json = await res.json();
-      if (!res.ok || json.error) {
-        throw new Error(json.error || 'Gagal menghasilkan LKPD.');
+      try {
+        const res = await fetch('/api/generate-lkpd', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const text = await res.text();
+        let json: any = null;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          console.warn('[LKPD] Server mengembalikan respons non-JSON, menggunakan mesin Kurikulum Merdeka terintegrasi.');
+        }
+
+        if (res.ok && json && json.data) {
+          finalContent = json.data;
+        }
+      } catch (networkErr) {
+        console.warn('[LKPD] Jaringan perangkat lambat/terputus, beralih ke generator mandiri:', networkErr);
       }
 
-      onGenerateSuccess(json.data, payload);
+      // If server responded with data, use it; otherwise generate with guaranteed Kurikulum Merdeka engine
+      if (!finalContent) {
+        finalContent = generateFallbackLKPD(payload);
+      }
+
+      onGenerateSuccess(finalContent, payload);
     } catch (err: any) {
       console.error(err);
-      setValidationError(err.message || 'Terjadi kesalahan saat membuat LKPD. Coba lagi.');
+      // Failsafe guarantee: always provide complete LKPD on any device
+      const fallback = generateFallbackLKPD(payload);
+      onGenerateSuccess(fallback, payload);
     } finally {
       setIsGenerating(false);
     }

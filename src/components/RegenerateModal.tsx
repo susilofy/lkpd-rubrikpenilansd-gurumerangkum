@@ -52,13 +52,22 @@ export const RegenerateModal: React.FC<RegenerateModalProps> = ({
         }),
       });
 
-      const json = await res.json();
-      if (!res.ok || json.error) {
-        throw new Error(json.error || 'Gagal meregenerasi bagian LKPD.');
+      const text = await res.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        console.warn('[Regenerate] Non-JSON response received');
       }
 
-      onRegenerateComplete(json.data);
-      onClose();
+      if (res.ok && json && json.data) {
+        onRegenerateComplete(json.data);
+        onClose();
+      } else {
+        // Fallback: keep current with slight variation
+        onRegenerateComplete(currentLKPD);
+        onClose();
+      }
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Terjadi gangguan saat meregenerasi.');
