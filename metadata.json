@@ -1,0 +1,8 @@
+{
+  "name": "GENERATOR LKPD \u0026 RUBRIK PENILAIAN GURU SD",
+  "description": "Aplikasi pembuatan Lembar Kerja Peserta Didik (LKPD) dan Rubrik Penilaian Kurikulum Merdeka untuk guru SD kelas 1–6 dengan ekspor dokumen Microsoft Word (.docx) otomatis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

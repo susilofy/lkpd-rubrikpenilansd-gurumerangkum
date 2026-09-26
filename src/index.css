@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+h1, h2, h3, h4, .font-heading {
+  font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 10mm 12mm 10mm;
+  }
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+  header, nav, footer, .print-hidden, .no-print {
+    display: none !important;
+  }
+  .print-page-break {
+    page-break-before: always;
+    break-before: page;
+  }
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
+
