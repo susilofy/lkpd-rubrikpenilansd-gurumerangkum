@@ -32,7 +32,7 @@ import { ColumnExamplesModal } from './ColumnExamplesModal';
 import { FieldExampleBadge } from './FieldExampleBadge';
 import { TopicSuggester } from './TopicSuggester';
 import { PresetSubjectExample } from '../data/columnExamplesData';
-import { getDynamicLkpdExamples } from '../utils/dynamicExamples';
+import { getDynamicLkpdExamples, getDefaultTopicForSubject } from '../utils/dynamicExamples';
 
 interface LKPDGeneratorProps {
   initialData?: Partial<LKPDFormData>;
@@ -52,7 +52,7 @@ export const LKPDGenerator: React.FC<LKPDGeneratorProps> = ({
     phase: initialData?.phase || 'Fase B',
     subject: initialData?.subject || 'Ilmu Pengetahuan Alam dan Sosial (IPAS)',
     semester: initialData?.semester || '1',
-    topic: initialData?.topic || '',
+    topic: initialData?.topic || 'Bagian Tubuh Tumbuhan dan Fungsinya',
     timeAllocation: initialData?.timeAllocation || '2 x 35 Menit',
     cp: initialData?.cp || '',
     tp: initialData?.tp || '',
@@ -242,12 +242,16 @@ export const LKPDGenerator: React.FC<LKPDGeneratorProps> = ({
 
   // Auto suggest CP & TP with AI
   const handleAutoSuggestCpTp = async () => {
-    const activeSubject = isCustomSubject ? customSubject : formData.subject;
-    if (!formData.grade || !activeSubject || !formData.topic.trim()) {
-      setValidationError('Isi Kelas, Mata Pelajaran, dan Topik terlebih dahulu untuk meminta rekomendasi CP & TP.');
-      return;
-    }
+    const activeSubject = isCustomSubject ? customSubject.trim() : formData.subject;
     setValidationError(null);
+
+    // If topic is empty, automatically choose the recommended topic for that subject and grade
+    let targetTopic = formData.topic.trim();
+    if (!targetTopic) {
+      targetTopic = getDefaultTopicForSubject(activeSubject || 'Ilmu Pengetahuan Alam dan Sosial (IPAS)', formData.grade);
+      setFormData((prev) => ({ ...prev, topic: targetTopic }));
+    }
+
     setIsSuggestingCpTp(true);
 
     try {
@@ -257,8 +261,8 @@ export const LKPDGenerator: React.FC<LKPDGeneratorProps> = ({
         body: JSON.stringify({
           grade: formData.grade,
           phase: formData.phase,
-          subject: activeSubject,
-          topic: formData.topic,
+          subject: activeSubject || formData.subject,
+          topic: targetTopic,
           semester: formData.semester,
           model: formData.model,
           characterProfiles: formData.characterProfiles,
@@ -268,13 +272,31 @@ export const LKPDGenerator: React.FC<LKPDGeneratorProps> = ({
       if (data.cp || data.tp || data.indicators) {
         setFormData((prev) => ({
           ...prev,
+          topic: targetTopic,
           cp: data.cp || prev.cp,
           tp: data.tp || prev.tp,
           indicators: data.indicators || prev.indicators,
         }));
+      } else {
+        // Fallback to high-quality dynamic examples if API returns incomplete data
+        setFormData((prev) => ({
+          ...prev,
+          topic: targetTopic,
+          cp: dynamicExamples.cp || prev.cp,
+          tp: dynamicExamples.tp || prev.tp,
+          indicators: dynamicExamples.indicators || prev.indicators,
+        }));
       }
     } catch (err) {
       console.error(err);
+      // Fallback on network/AI error so this action is always active and reliable
+      setFormData((prev) => ({
+        ...prev,
+        topic: targetTopic,
+        cp: dynamicExamples.cp || prev.cp,
+        tp: dynamicExamples.tp || prev.tp,
+        indicators: dynamicExamples.indicators || prev.indicators,
+      }));
     } finally {
       setIsSuggestingCpTp(false);
     }
@@ -286,14 +308,14 @@ export const LKPDGenerator: React.FC<LKPDGeneratorProps> = ({
 
     const activeSubject = isCustomSubject ? customSubject.trim() : formData.subject;
 
-    // Strict Validation requirement:
-    // "Sebelum Generate, sistem harus memastikan data penting sudah diisi.
-    // Jika ada yang kosong tampilkan pesan: 'Silakan lengkapi data pembelajaran terlebih dahulu.'
-    // Jangan generate jika: kelas belum dipilih, mata pelajaran belum dipilih, topik belum diisi"
-    if (!formData.grade || !activeSubject || !formData.topic.trim()) {
-      setValidationError('Silakan lengkapi data pembelajaran terlebih dahulu.');
-      window.scrollTo({ top: 150, behavior: 'smooth' });
-      return;
+    const currentGrade = formData.grade || '4';
+    const currentSubject = activeSubject || 'Ilmu Pengetahuan Alam dan Sosial (IPAS)';
+
+    // If topic is empty, automatically adopt the curriculum topic so generation always proceeds smoothly
+    let currentTopic = formData.topic.trim();
+    if (!currentTopic) {
+      currentTopic = getDefaultTopicForSubject(currentSubject, currentGrade);
+      setFormData((prev) => ({ ...prev, topic: currentTopic }));
     }
 
     setValidationError(null);
@@ -301,7 +323,9 @@ export const LKPDGenerator: React.FC<LKPDGeneratorProps> = ({
 
     const payload: LKPDFormData = {
       ...formData,
-      subject: activeSubject,
+      grade: currentGrade,
+      subject: currentSubject,
+      topic: currentTopic,
     };
 
     try {
@@ -583,9 +607,10 @@ export const LKPDGenerator: React.FC<LKPDGeneratorProps> = ({
               type="button"
               onClick={handleAutoSuggestCpTp}
               disabled={isSuggestingCpTp}
-              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 text-xs font-bold transition-colors disabled:opacity-50 shadow-xs"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-amber-500/25 hover:shadow-lg hover:shadow-amber-500/35 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              title="Rumuskan Capaian Pembelajaran (CP) dan Tujuan Pembelajaran (TP) secara otomatis"
             >
-              <Wand2 className="w-3.5 h-3.5 text-amber-600" />
+              <Wand2 className={`w-4 h-4 text-amber-100 ${isSuggestingCpTp ? 'animate-spin' : 'animate-pulse'}`} />
               <span>{isSuggestingCpTp ? 'Merumuskan CP & TP...' : '✨ Rumuskan CP & TP Otomatis'}</span>
             </button>
           </div>
@@ -1039,7 +1064,7 @@ export const LKPDGenerator: React.FC<LKPDGeneratorProps> = ({
             <button
               type="submit"
               disabled={isGenerating}
-              className="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base shadow-lg shadow-blue-500/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-base shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isGenerating ? (
                 <>

@@ -15,7 +15,7 @@ import { ColumnExamplesModal } from './ColumnExamplesModal';
 import { FieldExampleBadge } from './FieldExampleBadge';
 import { TopicSuggester } from './TopicSuggester';
 import { PresetSubjectExample } from '../data/columnExamplesData';
-import { getDynamicRubricExamples } from '../utils/dynamicExamples';
+import { getDynamicRubricExamples, getDefaultTopicForSubject } from '../utils/dynamicExamples';
 
 interface RubricGeneratorProps {
   initialData?: Partial<RubricFormData>;
@@ -33,7 +33,7 @@ export const RubricGenerator: React.FC<RubricGeneratorProps> = ({
     phase: initialData?.phase || 'Fase B',
     subject: initialData?.subject || 'Ilmu Pengetahuan Alam dan Sosial (IPAS)',
     semester: initialData?.semester || '1',
-    topic: initialData?.topic || '',
+    topic: initialData?.topic || 'Bagian Tubuh Tumbuhan dan Fungsinya',
     learningObjectives: initialData?.learningObjectives || '',
     taskType: initialData?.taskType || 'Praktik',
     criteriaCount: initialData?.criteriaCount || 4,
@@ -99,10 +99,13 @@ export const RubricGenerator: React.FC<RubricGeneratorProps> = ({
     e.preventDefault();
 
     const activeSubject = isCustomSubject ? customSubject.trim() : formData.subject;
+    const currentGrade = formData.grade || '4';
+    const currentSubject = activeSubject || 'Ilmu Pengetahuan Alam dan Sosial (IPAS)';
 
-    if (!formData.grade || !activeSubject || !formData.topic.trim()) {
-      setValidationError('Silakan lengkapi Kelas, Mata Pelajaran, dan Topik terlebih dahulu.');
-      return;
+    let currentTopic = formData.topic.trim();
+    if (!currentTopic) {
+      currentTopic = getDefaultTopicForSubject(currentSubject, currentGrade);
+      setFormData((prev) => ({ ...prev, topic: currentTopic }));
     }
 
     setValidationError(null);
@@ -110,8 +113,10 @@ export const RubricGenerator: React.FC<RubricGeneratorProps> = ({
 
     const payload: RubricFormData = {
       ...formData,
-      subject: activeSubject,
-      learningObjective: formData.learningObjectives || formData.topic,
+      grade: currentGrade,
+      subject: currentSubject,
+      topic: currentTopic,
+      learningObjective: formData.learningObjectives || currentTopic,
     };
 
     try {
@@ -435,7 +440,7 @@ export const RubricGenerator: React.FC<RubricGeneratorProps> = ({
           <button
             type="submit"
             disabled={isGenerating}
-            className="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-base shadow-lg shadow-indigo-500/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
+            className="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-base shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isGenerating ? (
               <>
